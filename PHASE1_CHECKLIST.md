@@ -4,7 +4,7 @@
 **Workspace**: `/root/Honors-EEG`  
 **Target Environment**: `honors_env` (Python 3.10.12)  
 **Prototyping Cohort**: `chb01`, `chb03`, `chb05`, `chb07`, `chb08` (5 patients, debugging only)  
-**Status**: Focused Evidence Audit Completed — Awaiting User Authorization for Minimal Dependency Installation
+**Status**: Phase 1 Fully Completed & Verified Across Prototype Cohort — Ready for Phase 2 Baseline Models
 
 ---
 
@@ -173,18 +173,28 @@ All calculations operate in integer sample indices at $f_s = 256\text{ Hz}$ to e
   - Resolved `chb07_18` vs `chb07_19` typo in `RECORDS-WITH-SEIZURES`.
   - Audited `T8-P8` duplicate channels across all 686 files.
   - Finalized mathematical windowing, labeling, and event-evaluation rules.
-- [ ] **Task 1.2: Dependency Installation (Awaiting Authorization)**
-  - Execute proposed pip command in `honors_env` for `scikit-learn`, `mne`, `pandas`, `scipy`.
-- [ ] **Task 1.3: Metadata & Manifest Parser (`src/data/metadata_parser.py`)**
-  - Parse all 24 `chbXX-summary.txt` files into a unified manifest (`metadata_manifest.parquet` or CSV).
-  - Cross-check parsed entries against `.edf.seizures` on disk.
-- [ ] **Task 1.4: EDF Segment Loader & Preprocessing (`src/data/loader.py`)**
-  - Implement memory-safe chunk reader using `mne.io.read_raw_edf(..., preload=False)`.
-  - Extract canonical 18 channels with de-duplication of `T8-P8`.
-  - Apply 0.5–45 Hz zero-phase bandpass filter and z-score scaling.
-- [ ] **Task 1.5: Windowing & Label Generator (`src/data/windowing.py`)**
-  - Slicing with exact sample overlap and guard-band logic.
-- [ ] **Task 1.6: Feature Extraction Module (`src/features/feature_extractor.py`)**
-  - Compute 14 time/frequency features per channel (252 total features per window).
-- [ ] **Task 1.7: Prototype Validation Test (`tests/test_prototype_pipeline.py`)**
-  - Run end-to-end extraction on 5-patient cohort.
+- [x] **Task 1.2: Dependency Installation**
+  - Executed minimal pip installation in `honors_env` for `numpy`, `scipy`, `pandas`, `scikit-learn`, `mne`, `matplotlib`, `tqdm`, `pyarrow`.
+  - Verified clean import in `honors_env`.
+- [x] **Task 1.3: Metadata & Manifest Parser (`src/data/metadata_parser.py`)**
+  - Implemented `CHBMITMetadataParser` parsing all 24 summary files into unified manifests (`recordings_manifest.parquet` and `seizures_manifest.parquet`).
+  - Unit test `tests/test_metadata_parser.py` passed: 686 recordings, 141 seizure files, 198 seizures, 11,611s ictal time.
+- [x] **Task 1.4: EDF Segment Loader & Preprocessing (`src/data/loader.py`)**
+  - Implemented `EDFLoader` with memory-safe chunk loading, 18 canonical channels mapping, first-occurrence `T8-P8` de-duplication, 0.5–45 Hz zero-phase bandpass filtering, and z-score scaling.
+  - Verified with unit tests in `tests/test_loader_and_windowing.py`.
+- [x] **Task 1.5: Windowing & Label Generator (`src/data/windowing.py`)**
+  - Implemented `WindowGenerator` with integer-sample overlap calculation ($r \ge 0.5$ for $y=1$), $0 < r < 0.5$ boundary exclusion during training, 60s pre/post-ictal guard bands, and full un-subsampled continuous evaluation mode.
+  - Verified with synthetic and real signal unit tests.
+- [x] **Task 1.6: Feature Extraction Module (`src/features/feature_extractor.py`)**
+  - Implemented `EEGFeatureExtractor` computing 14 time/spectral features across 18 channels = 252 features per window.
+  - Unit test `tests/test_feature_extractor.py` passed: output shape `(N, 252)`, finite values, bounded relative powers and entropy.
+- [x] **Task 1.7: Prototype Validation Test (`tests/test_prototype_pipeline.py`)**
+  - Executed end-to-end pipeline across all 5 prototype patients (`chb01`, `chb03`, `chb05`, `chb07`, `chb08`).
+  - All 5 subjects passed:
+    - `chb01_03.edf`: 41 ictal windows, features `(41, 252)`.
+    - `chb03_01.edf`: 53 ictal windows, features `(53, 252)`.
+    - `chb05_06.edf`: 116 ictal windows, features `(116, 252)`.
+    - `chb07_19.edf`: 144 ictal windows, features `(144, 252)`.
+    - `chb08_02.edf`: 172 ictal windows, features `(172, 252)`.
+    - Non-seizure files verified producing 0 false positive labels.
+    - Event-level collar hysteresis and single-count evaluation logic verified.

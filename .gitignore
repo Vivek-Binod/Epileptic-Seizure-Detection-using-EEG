@@ -1,0 +1,24 @@
+# Virtual environment
+honors_env/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Data artifacts & cache
+data/
+outputs/
+*.npy
+*.npz
+*.parquet
+*.h5
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/

@@ -18,7 +18,8 @@ __pycache__/
 *.parquet
 *.h5
 
-# OS / Editor
+# OS / Editor / Scratch
 .DS_Store
 .vscode/
 .idea/
+scratch/

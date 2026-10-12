@@ -24,7 +24,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -56,7 +56,10 @@ from src.utils.config import (
 )
 
 
-def compute_config_fingerprint(custom_config: Optional[Dict] = None) -> str:
+def compute_config_fingerprint(
+    custom_config: Optional[Dict] = None,
+    extractor: Optional[Any] = None,
+) -> str:
     """Compute deterministic SHA-256 fingerprint for all pipeline parameters.
 
     Any change to channels, filter cutoffs, window duration, or feature definitions
@@ -65,7 +68,8 @@ def compute_config_fingerprint(custom_config: Optional[Dict] = None) -> str:
     if custom_config is not None:
         cfg = dict(custom_config)
     else:
-        extractor = EEGFeatureExtractor()
+        ext = extractor if extractor is not None else EEGFeatureExtractor()
+        bands_dict = getattr(ext, "bands", {})
         cfg = {
             "cache_version": CACHE_VERSION,
             "sampling_rate": SAMPLING_RATE,
@@ -78,9 +82,9 @@ def compute_config_fingerprint(custom_config: Optional[Dict] = None) -> str:
             "overlap_threshold": OVERLAP_THRESHOLD,
             "pre_ictal_guard_sec": PRE_ICTAL_GUARD_SEC,
             "post_ictal_guard_sec": POST_ICTAL_GUARD_SEC,
-            "bands": {k: list(v) for k, v in extractor.bands.items()},
-            "feature_names": extractor.feature_names,
-            "feature_count": len(extractor.feature_names),
+            "bands": {k: list(v) for k, v in bands_dict.items()},
+            "feature_names": ext.feature_names,
+            "feature_count": len(ext.feature_names),
         }
 
     canonical_json = json.dumps(cfg, sort_keys=True)
@@ -109,11 +113,13 @@ class FeatureCache:
     def __init__(
         self,
         cache_dir: Optional[Union[str, Path]] = None,
+        extractor: Optional[Any] = None,
         config_fingerprint: Optional[str] = None,
         patient_mapping: Dict[str, str] = PATIENT_ID_MAPPING,
     ):
         self.base_cache_dir = Path(cache_dir) if cache_dir is not None else FEATURE_CACHE_DIR
-        self.fingerprint = config_fingerprint if config_fingerprint is not None else compute_config_fingerprint()
+        self.extractor = extractor if extractor is not None else EEGFeatureExtractor()
+        self.fingerprint = config_fingerprint if config_fingerprint is not None else compute_config_fingerprint(extractor=self.extractor)
         self.fingerprint_short = self.fingerprint[:12]
 
         # Directory partitioned by configuration fingerprint
@@ -121,7 +127,6 @@ class FeatureCache:
         self.versioned_dir.mkdir(parents=True, exist_ok=True)
 
         self.patient_mapping = dict(patient_mapping)
-        self.extractor = EEGFeatureExtractor()
         self.loader = EDFLoader()
         self.window_gen = WindowGenerator()
 
@@ -162,7 +167,7 @@ class FeatureCache:
         try:
             parquet_file = pq.ParquetFile(str(cache_path))
             meta = parquet_file.metadata
-            if meta.num_rows == 0 or meta.num_columns < (len(self.METADATA_COLUMNS) + 252):
+            if meta.num_rows == 0 or meta.num_columns < (len(self.METADATA_COLUMNS) + len(self.extractor.feature_names)):
                 return False
             return True
         except Exception:

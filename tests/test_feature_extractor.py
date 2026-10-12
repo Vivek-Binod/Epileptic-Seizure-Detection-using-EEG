@@ -42,6 +42,23 @@ def test_feature_extractor():
                 f"Spectral entropy out of bounds for {name}: min={col_vals.min()}, max={col_vals.max()}"
             )
 
+    # 4. Check that for every channel, sum of relative band powers across the 5 bands equals 1.0
+    for ch_idx, ch in enumerate(extractor.channels):
+        band_cols = [
+            extractor.feature_names.index(f"{ch}_{b}_power")
+            for b in ["delta", "theta", "alpha", "beta", "gamma"]
+        ]
+        sum_band_powers = np.sum(features[:, band_cols], axis=1)
+        assert np.allclose(sum_band_powers, 1.0, atol=1e-4), (
+            f"Band powers do not sum to 1.0 for {ch}: {sum_band_powers}"
+        )
+
+    # 5. Robustness check on all-zero windows
+    zero_windows = np.zeros((2, n_ch, n_samples), dtype=np.float32)
+    zero_features = extractor.extract_features(zero_windows)
+    assert not np.isnan(zero_features).any()
+    assert not np.isinf(zero_features).any()
+
     print("test_feature_extractor PASSED successfully!")
 
 

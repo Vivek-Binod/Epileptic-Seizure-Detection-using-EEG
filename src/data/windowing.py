@@ -48,6 +48,7 @@ class WindowGenerator:
         seizure_intervals: List[Tuple[int, int]],
         is_training: bool = True,
         neg_pos_ratio: Optional[float] = None,
+        eval_stride_samples: Optional[int] = None,
         random_seed: int = 42,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         """Extract windows from a continuous multi-channel signal array.
@@ -59,6 +60,8 @@ class WindowGenerator:
                          If False, evaluates full continuous recording without omissions.
             neg_pos_ratio: Ratio of negative to positive windows for training subsampling.
                            If None, retains all valid negative windows.
+            eval_stride_samples: Step size in samples for evaluation sliding window.
+                                 If None, defaults to interictal_stride_samples.
             random_seed: Seed for reproducible negative subsampling.
 
         Returns:
@@ -80,6 +83,7 @@ class WindowGenerator:
             return self._extract_evaluation_windows(
                 signal=signal,
                 seizure_intervals=seizure_intervals,
+                eval_stride_samples=eval_stride_samples,
             )
 
     def _extract_training_windows(
@@ -95,24 +99,41 @@ class WindowGenerator:
         pos_meta: List[Dict] = []
 
         # 1. Extract Ictal (Seizure) Windows with fine stride (data augmentation)
+        seen_starts = set()
         for s_idx, (s_start, s_end) in enumerate(seizure_intervals):
             # Start sliding slightly before seizure onset to capture transitions that meet threshold
             search_start = max(0, s_start - self.window_samples)
             search_end = min(total_samples - self.window_samples, s_end + self.window_samples)
 
             for w_start in range(search_start, search_end + 1, self.ictal_stride_samples):
+                if w_start in seen_starts:
+                    continue
                 w_end = w_start + self.window_samples
                 if w_end > total_samples:
                     break
 
-                # Overlap calculation with this seizure
-                overlap = max(0, min(w_end, s_end) - max(w_start, s_start))
-                ratio = overlap / float(self.window_samples)
+                # Overlap calculation: sum of overlaps across all seizure intervals in recording
+                total_overlap = sum(
+                    max(0, min(w_end, cur_end) - max(w_start, cur_start))
+                    for cur_start, cur_end in seizure_intervals
+                )
+                ratio = total_overlap / float(self.window_samples)
 
                 # Positive label condition: r >= 0.5
                 if ratio >= self.overlap_threshold:
+                    seen_starts.add(w_start)
                     window = signal[:, w_start:w_end]
                     pos_windows.append(window)
+
+                    # Identify the primary matching seizure index for metadata
+                    best_s_idx = None
+                    max_single_overlap = 0
+                    for cur_idx, (cur_start, cur_end) in enumerate(seizure_intervals, start=1):
+                        single_o = max(0, min(w_end, cur_end) - max(w_start, cur_start))
+                        if single_o > max_single_overlap:
+                            max_single_overlap = single_o
+                            best_s_idx = cur_idx
+
                     pos_meta.append(
                         {
                             "start_sample": w_start,
@@ -120,7 +141,7 @@ class WindowGenerator:
                             "start_sec": w_start / float(self.sfreq),
                             "end_sec": w_end / float(self.sfreq),
                             "overlap_ratio": ratio,
-                            "seizure_idx": s_idx + 1,
+                            "seizure_idx": best_s_idx,
                             "label": 1,
                             "category": "ictal",
                         }
@@ -196,28 +217,36 @@ class WindowGenerator:
         self,
         signal: np.ndarray,
         seizure_intervals: List[Tuple[int, int]],
+        eval_stride_samples: Optional[int] = None,
     ) -> Tuple[np.ndarray, np.ndarray, pd.DataFrame]:
         """Evaluation mode: slices full continuous recording sequentially without guard-band exclusion."""
         n_channels, total_samples = signal.shape
         eval_windows: List[np.ndarray] = []
         eval_meta: List[Dict] = []
 
-        # Sequential non-overlapping or uniform sliding
-        for w_start in range(0, total_samples - self.window_samples + 1, self.interictal_stride_samples):
+        stride = eval_stride_samples if eval_stride_samples is not None else self.interictal_stride_samples
+
+        # Sequential uniform sliding across full recording
+        for w_start in range(0, total_samples - self.window_samples + 1, stride):
             w_end = w_start + self.window_samples
 
-            # Calculate overlap with any seizure
-            max_overlap = 0
-            best_s_idx = None
-            for s_idx, (s_start, s_end) in enumerate(seizure_intervals):
-                overlap = max(0, min(w_end, s_end) - max(w_start, s_start))
-                if overlap > max_overlap:
-                    max_overlap = overlap
-                    best_s_idx = s_idx + 1
-
-            ratio = max_overlap / float(self.window_samples)
+            # Total overlap calculation across all seizure intervals
+            total_overlap = sum(
+                max(0, min(w_end, s_end) - max(w_start, s_start))
+                for s_start, s_end in seizure_intervals
+            )
+            ratio = total_overlap / float(self.window_samples)
             label = 1 if ratio >= self.overlap_threshold else 0
             category = "ictal" if label == 1 else "interictal"
+
+            # Primary seizure index for metadata
+            best_s_idx = None
+            max_single_overlap = 0
+            for s_idx, (s_start, s_end) in enumerate(seizure_intervals, start=1):
+                single_o = max(0, min(w_end, s_end) - max(w_start, s_start))
+                if single_o > max_single_overlap:
+                    max_single_overlap = single_o
+                    best_s_idx = s_idx
 
             eval_windows.append(signal[:, w_start:w_end])
             eval_meta.append(

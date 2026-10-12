@@ -2,6 +2,7 @@
 
 from .loader import EDFLoader
 from .metadata_parser import CHBMITMetadataParser, save_manifests
+from .splitters import PatientGroupedSplitter, WithinPatientChronologicalSplitter
 from .windowing import WindowGenerator
 
 __all__ = [
@@ -9,4 +10,6 @@ __all__ = [
     "save_manifests",
     "EDFLoader",
     "WindowGenerator",
+    "PatientGroupedSplitter",
+    "WithinPatientChronologicalSplitter",
 ]

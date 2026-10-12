@@ -112,10 +112,16 @@ class EEGFeatureExtractor:
         valid_psd = psd[:, :, valid_idx]  # (N, n_ch, n_valid_freqs)
         total_power = np.sum(valid_psd, axis=-1, keepdims=True) + 1e-12
 
-        # Relative Band Powers
+        # Relative Band Powers (partitioning 0.5-45 Hz without bin double-counting)
         band_powers = []
-        for band_name, (f_low, f_high) in self.bands.items():
-            b_idx = (valid_freqs >= f_low) & (valid_freqs <= f_high)
+        band_keys = list(self.bands.keys())
+        for i, (band_name, (f_low, f_high)) in enumerate(self.bands.items()):
+            # Use half-open intervals [f_low, f_high) for delta..beta, and [f_low, f_high] for gamma
+            # to prevent boundary frequency bins (4, 8, 12, 30 Hz) from being double-counted.
+            if i == len(band_keys) - 1:
+                b_idx = (valid_freqs >= f_low) & (valid_freqs <= f_high)
+            else:
+                b_idx = (valid_freqs >= f_low) & (valid_freqs < f_high)
             b_power = np.sum(valid_psd[:, :, b_idx], axis=-1) / total_power.squeeze(-1)
             band_powers.append(b_power)  # list of (N, n_ch)
 
@@ -128,8 +134,9 @@ class EEGFeatureExtractor:
         # Spectral Edge Frequency (95% power frequency)
         cum_power = np.cumsum(valid_psd, axis=-1) / total_power
         # Find frequency where cumulative power exceeds 0.95
-        # Vectorized across N and n_ch
-        edge_idx = np.argmax(cum_power >= 0.95, axis=-1)
+        # Vectorized across N and n_ch; fallback to valid_freqs[-1] if 0.95 is not reached
+        has_edge = np.any(cum_power >= 0.95, axis=-1)
+        edge_idx = np.where(has_edge, np.argmax(cum_power >= 0.95, axis=-1), len(valid_freqs) - 1)
         spec_edge_95 = valid_freqs[edge_idx]  # (N, n_ch)
 
         # Stack per-channel features into (N, n_ch, 14)

@@ -112,20 +112,72 @@ def test_windowing_synthetic():
             f"Negative window [{w_s}, {w_e}] violates guard band [{guard_start_sample}, {guard_end_sample}]"
         )
 
-    # 2. Evaluation mode
+    # 2. Evaluation mode (default stride)
     eval_windows, eval_labels, eval_meta = generator.extract_windows_for_recording(
         signal=signal,
         seizure_intervals=seizure_intervals,
         is_training=False,
     )
-    # Non-overlapping slicing over 300 seconds gives floor((76800 - 1024)/1024) + 1 = 75 windows
     expected_eval_windows = (total_samples - window_samples) // interictal_stride + 1
     assert len(eval_windows) == expected_eval_windows
     print("test_windowing_synthetic PASSED!")
+
+
+def test_windowing_multi_seizures_and_strides():
+    """Test multiple closely-spaced seizures and configurable evaluation sliding strides."""
+    sfreq = 256
+    window_samples = 1024  # 4s
+    generator = WindowGenerator(sampling_rate=sfreq, window_samples=window_samples)
+
+    total_samples = 200 * sfreq
+    signal = np.zeros((18, total_samples), dtype=np.float32)
+
+    # Two closely spaced seizures:
+    # Seizure 1: 50s to 52s (duration 2s = 512 samples)
+    # Seizure 2: 53s to 55s (duration 2s = 512 samples)
+    # Gap is 1s (256 samples).
+    s1 = (50 * sfreq, 52 * sfreq)
+    s2 = (53 * sfreq, 55 * sfreq)
+    seizure_intervals = [s1, s2]
+
+    # A window from 51s to 55s (4s duration) covers:
+    # 1s of s1 (256 samples) + 1s gap + 2s of s2 (512 samples) = 768 samples total seizure!
+    # 768 / 1024 = 75% overlap. Should be labeled positive (y=1)!
+    w_start = 51 * sfreq
+    w_end = w_start + window_samples
+    total_o = sum(max(0, min(w_end, se) - max(w_start, ss)) for ss, se in seizure_intervals)
+    assert total_o == 768
+
+    # Test training extraction with deduplication
+    train_w, train_y, train_meta = generator.extract_windows_for_recording(
+        signal=signal,
+        seizure_intervals=seizure_intervals,
+        is_training=True,
+    )
+    # Verify no duplicate start_samples
+    assert len(train_meta["start_sample"]) == len(train_meta["start_sample"].unique()), (
+        "Duplicate window starts found in training extraction!"
+    )
+    assert np.all(train_y[train_meta["overlap_ratio"] >= 0.5] == 1)
+
+    # Test evaluation mode with fine 1.0s sliding stride (256 samples)
+    eval_stride = 256
+    eval_w, eval_y, eval_meta = generator.extract_windows_for_recording(
+        signal=signal,
+        seizure_intervals=seizure_intervals,
+        is_training=False,
+        eval_stride_samples=eval_stride,
+    )
+    expected_fine_windows = (total_samples - window_samples) // eval_stride + 1
+    assert len(eval_w) == expected_fine_windows
+    # Some windows spanning the two seizures must be positive
+    assert np.sum(eval_y == 1) > 0
+    print("test_windowing_multi_seizures_and_strides PASSED!")
 
 
 if __name__ == "__main__":
     test_loader_inspect_and_slice()
     test_loader_duplicate_channel_policy()
     test_windowing_synthetic()
+    test_windowing_multi_seizures_and_strides()
     print("\nALL LOADER AND WINDOWING TESTS PASSED!")

@@ -198,3 +198,10 @@ All calculations operate in integer sample indices at $f_s = 256\text{ Hz}$ to e
     - `chb08_02.edf`: 172 ictal windows, features `(172, 252)`.
     - Non-seizure files verified producing 0 false positive labels.
     - Event-level collar hysteresis and single-count evaluation logic verified.
+- [x] **Task 1.8: Leakage-Safe Dataset Splitters & Methodological Audit Fixes (`src/data/splitters.py`)**
+  - Implemented `PatientGroupedSplitter` supporting Leave-One-Subject-Out (23 unique biological patient folds) and Group-KFold cross-validation.
+  - Enforced strict binding of `chb01` and `chb21` to `patient_01`, preventing patient identity leakage.
+  - Implemented `WithinPatientChronologicalSplitter` for patient-specific chronological session evaluation.
+  - Audited and corrected `EEGFeatureExtractor` frequency bin overlap (half-open sub-bands now guarantee relative band powers strictly sum to 1.0; robust spectral edge fallback on quiet signals).
+  - Audited and corrected `WindowGenerator` for multi-seizure overlap aggregation, training window deduplication, and configurable evaluation stride.
+  - Unit tests verified in `tests/test_splitters.py`, `tests/test_feature_extractor.py`, and `tests/test_loader_and_windowing.py` (11 of 11 tests passing).

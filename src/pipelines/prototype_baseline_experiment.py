@@ -25,6 +25,7 @@ from src.data.loader import EDFLoader
 from src.data.metadata_parser import CHBMITMetadataParser
 from src.data.windowing import WindowGenerator
 from src.evaluation.metrics import compute_event_metrics, compute_window_metrics
+from src.features.cache import FeatureCache
 from src.features.feature_extractor import EEGFeatureExtractor
 from src.models.baseline import BaselineClassifier
 from src.utils.config import DATASET_DIR, OUTPUTS_DIR, PROTOTYPE_COHORT, SAMPLING_RATE
@@ -32,6 +33,7 @@ from src.utils.config import DATASET_DIR, OUTPUTS_DIR, PROTOTYPE_COHORT, SAMPLIN
 
 def run_prototype_baseline_experiment(
     model_type: str = "rf",
+    use_cache: bool = True,
     output_dir: Path = OUTPUTS_DIR,
     save_outputs: bool = True,
 ) -> Dict:
@@ -39,6 +41,7 @@ def run_prototype_baseline_experiment(
 
     Args:
         model_type: 'rf' (Random Forest) or 'lgbm' (LightGBM)
+        use_cache: Whether to use on-disk FeatureCache for fast reproducible runs
         output_dir: Directory to save summary files
         save_outputs: Whether to write JSON/CSV reports
 
@@ -72,8 +75,9 @@ def run_prototype_baseline_experiment(
 
     # 2. Pre-extract features per subject to make LOSO fast & modular
     subject_data: Dict[str, Dict] = {}
+    feature_cache = FeatureCache() if use_cache else None
 
-    print("\n[Step 1/3] Extracting features for prototype subject recordings...")
+    print("\n[Step 1/3] Extracting/loading features for prototype subject recordings...")
     for subj in PROTOTYPE_COHORT:
         seiz_fn, non_seiz_fn = test_pairs[subj]
         seiz_path = DATASET_DIR / subj / seiz_fn
@@ -88,44 +92,82 @@ def run_prototype_baseline_experiment(
             (float(row["start_sec"]), float(row["end_sec"])) for _, row in subj_seizures.iterrows()
         ]
 
-        # Load seizure recording full signal
-        seiz_signal, seiz_info = loader.load_full_recording(seiz_path)
-        # Training windows: seizure recording (with fine stride on ictal, coarse on background)
-        tr_win, tr_y, tr_meta = window_gen.extract_windows_for_recording(
-            signal=seiz_signal,
-            seizure_intervals=seiz_intervals,
-            is_training=True,
-            neg_pos_ratio=10.0,
-            random_seed=42,
-        )
+        if use_cache and feature_cache is not None:
+            # Training windows: seizure recording
+            tr_df = feature_cache.extract_or_load(
+                case_id=subj,
+                file_name=seiz_fn,
+                mode="training",
+                seizure_intervals=seiz_intervals,
+                neg_pos_ratio=10.0,
+                random_seed=42,
+            )
+            tr_feats, tr_y, _ = feature_cache.df_to_features_and_labels(tr_df)
 
-        # Non-seizure recording: load 5 minutes (300s = 75 negative windows)
-        ns_slice = loader.load_slice(
-            non_seiz_path,
-            start_sample=0,
-            stop_sample=300 * SAMPLING_RATE,
-            apply_filter=True,
-            apply_standardization=True,
-        )
-        ns_win, ns_y, ns_meta = window_gen.extract_windows_for_recording(
-            signal=ns_slice,
-            seizure_intervals=[],
-            is_training=True,
-        )
+            # Non-seizure recording: load 5 minutes (300s = 75 negative windows)
+            ns_df = feature_cache.extract_or_load(
+                case_id=subj,
+                file_name=non_seiz_fn,
+                mode="training_ns",
+                seizure_intervals=[],
+                stop_sample=300 * SAMPLING_RATE,
+            )
+            ns_feats, ns_y, _ = feature_cache.df_to_features_and_labels(ns_df)
 
-        # Combine training data for this subject
-        comb_win = np.concatenate([tr_win, ns_win], axis=0) if len(ns_win) > 0 else tr_win
-        comb_y = np.concatenate([tr_y, ns_y], axis=0) if len(ns_y) > 0 else tr_y
-        comb_feats = extractor.extract_features(comb_win)
+            comb_feats = np.concatenate([tr_feats, ns_feats], axis=0) if len(ns_feats) > 0 else tr_feats
+            comb_y = np.concatenate([tr_y, ns_y], axis=0) if len(ns_y) > 0 else tr_y
 
-        # Evaluation windows: test on continuous seizure recording (sequential sliding)
-        eval_win, eval_y, eval_meta = window_gen.extract_windows_for_recording(
-            signal=seiz_signal,
-            seizure_intervals=seiz_intervals,
-            is_training=False,
-            eval_stride_samples=SAMPLING_RATE,  # 1.0s stride for continuous event collar
-        )
-        eval_feats = extractor.extract_features(eval_win)
+            # Evaluation windows: test on continuous seizure recording (sequential sliding)
+            eval_df = feature_cache.extract_or_load(
+                case_id=subj,
+                file_name=seiz_fn,
+                mode="evaluation",
+                seizure_intervals=seiz_intervals,
+                eval_stride_samples=SAMPLING_RATE,
+            )
+            eval_feats, eval_y, eval_meta = feature_cache.df_to_features_and_labels(eval_df)
+            seiz_info = loader.inspect_header(seiz_path)
+            duration_sec = float(seiz_info["duration_sec"])
+        else:
+            # Load seizure recording full signal
+            seiz_signal, seiz_info = loader.load_full_recording(seiz_path)
+            # Training windows: seizure recording (with fine stride on ictal, coarse on background)
+            tr_win, tr_y, tr_meta = window_gen.extract_windows_for_recording(
+                signal=seiz_signal,
+                seizure_intervals=seiz_intervals,
+                is_training=True,
+                neg_pos_ratio=10.0,
+                random_seed=42,
+            )
+
+            # Non-seizure recording: load 5 minutes (300s = 75 negative windows)
+            ns_slice = loader.load_slice(
+                non_seiz_path,
+                start_sample=0,
+                stop_sample=300 * SAMPLING_RATE,
+                apply_filter=True,
+                apply_standardization=True,
+            )
+            ns_win, ns_y, ns_meta = window_gen.extract_windows_for_recording(
+                signal=ns_slice,
+                seizure_intervals=[],
+                is_training=True,
+            )
+
+            # Combine training data for this subject
+            comb_win = np.concatenate([tr_win, ns_win], axis=0) if len(ns_win) > 0 else tr_win
+            comb_y = np.concatenate([tr_y, ns_y], axis=0) if len(ns_y) > 0 else tr_y
+            comb_feats = extractor.extract_features(comb_win)
+
+            # Evaluation windows: test on continuous seizure recording (sequential sliding)
+            eval_win, eval_y, eval_meta = window_gen.extract_windows_for_recording(
+                signal=seiz_signal,
+                seizure_intervals=seiz_intervals,
+                is_training=False,
+                eval_stride_samples=SAMPLING_RATE,  # 1.0s stride for continuous event collar
+            )
+            eval_feats = extractor.extract_features(eval_win)
+            duration_sec = float(seiz_info["duration_sec"])
 
         subject_data[subj] = {
             "train_X": comb_feats,
@@ -134,7 +176,7 @@ def run_prototype_baseline_experiment(
             "eval_y": eval_y,
             "eval_meta": eval_meta,
             "annotated_seizures_sec": annotated_seiz_sec,
-            "duration_sec": float(seiz_info["duration_sec"]),
+            "duration_sec": duration_sec,
         }
         print(
             f"  Subj {subj}: Train samples={len(comb_y)} (Pos={np.sum(comb_y == 1)}, Neg={np.sum(comb_y == 0)}) | "

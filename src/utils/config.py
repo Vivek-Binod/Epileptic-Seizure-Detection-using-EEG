@@ -8,6 +8,10 @@ DATASET_DIR = Path("/mnt/d/College/Honors/chb-mit-scalp-eeg-database-1.0.0")
 WORKSPACE_DIR = Path("/root/Honors-EEG")
 OUTPUTS_DIR = WORKSPACE_DIR / "outputs"
 DATA_DIR = WORKSPACE_DIR / "data"
+FEATURE_CACHE_DIR = DATA_DIR / "feature_cache"
+
+# Cache configuration
+CACHE_VERSION = "1.0.0"
 
 # Standard 18 bipolar channels (longitudinal bipolar / double banana montage)
 # Ordered logically by anatomical chains:

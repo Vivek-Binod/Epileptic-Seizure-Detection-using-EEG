@@ -251,6 +251,7 @@ class FeatureCache:
         eval_stride_samples: Optional[int] = None,
         stop_sample: Optional[int] = None,
         random_seed: int = 42,
+        verbose: bool = False,
     ) -> pd.DataFrame:
         """Retrieve features from cache or extract from raw EDF on cache-miss.
 
@@ -264,6 +265,7 @@ class FeatureCache:
             eval_stride_samples: Step size in samples for evaluation sliding window
             stop_sample: Optional upper sample bound for bounded slice extraction
             random_seed: Random state for reproducible negative subsampling
+            verbose: If True, log cache hits and misses to stdout
 
         Returns:
             pd.DataFrame containing all metadata and 252 extracted feature columns.
@@ -271,7 +273,12 @@ class FeatureCache:
         # 1. Check cache hit
         cached_df = self.load_recording_features(case_id, file_name, mode)
         if cached_df is not None:
+            if verbose:
+                print(f"  [CACHE HIT] {case_id}/{file_name} ({mode}) loaded from Parquet cache.")
             return cached_df
+
+        if verbose:
+            print(f"  [CACHE MISS] {case_id}/{file_name} ({mode}) extracting from raw EDF...")
 
         # 2. Cache miss: Bounded memory loading of this single recording
         if full_path is None:

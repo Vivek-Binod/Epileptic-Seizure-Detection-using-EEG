@@ -34,6 +34,7 @@ from src.utils.config import DATASET_DIR, OUTPUTS_DIR, PROTOTYPE_COHORT, SAMPLIN
 def run_prototype_baseline_experiment(
     model_type: str = "rf",
     use_cache: bool = True,
+    verbose_cache: bool = False,
     output_dir: Path = OUTPUTS_DIR,
     save_outputs: bool = True,
 ) -> Dict:
@@ -42,6 +43,7 @@ def run_prototype_baseline_experiment(
     Args:
         model_type: 'rf' (Random Forest) or 'lgbm' (LightGBM)
         use_cache: Whether to use on-disk FeatureCache for fast reproducible runs
+        verbose_cache: Whether to print cache hit/miss status for each recording
         output_dir: Directory to save summary files
         save_outputs: Whether to write JSON/CSV reports
 
@@ -101,6 +103,7 @@ def run_prototype_baseline_experiment(
                 seizure_intervals=seiz_intervals,
                 neg_pos_ratio=10.0,
                 random_seed=42,
+                verbose=verbose_cache,
             )
             tr_feats, tr_y, _ = feature_cache.df_to_features_and_labels(tr_df)
 
@@ -111,6 +114,7 @@ def run_prototype_baseline_experiment(
                 mode="training_ns",
                 seizure_intervals=[],
                 stop_sample=300 * SAMPLING_RATE,
+                verbose=verbose_cache,
             )
             ns_feats, ns_y, _ = feature_cache.df_to_features_and_labels(ns_df)
 
@@ -124,6 +128,7 @@ def run_prototype_baseline_experiment(
                 mode="evaluation",
                 seizure_intervals=seiz_intervals,
                 eval_stride_samples=SAMPLING_RATE,
+                verbose=verbose_cache,
             )
             eval_feats, eval_y, eval_meta = feature_cache.df_to_features_and_labels(eval_df)
             seiz_info = loader.inspect_header(seiz_path)

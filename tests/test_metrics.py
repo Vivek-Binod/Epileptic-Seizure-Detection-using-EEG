@@ -99,7 +99,16 @@ def test_compute_event_metrics():
     # - Total hours = 1.0, so FP/h = 1.0.
     assert np.isclose(metrics["fp_per_hour"], 1.0)
 
+    # - Detection delays:
+    #   Seizure 1 first alarm triggers at window t=512 (3rd consecutive window of burst starting at 510).
+    #   Delay = 512.0 - 500.0 = 12.0s.
+    assert "detection_delays_sec" in metrics
+    assert len(metrics["detection_delays_sec"]) == 1
+    assert np.isclose(metrics["detection_delays_sec"][0], 12.0)
+    assert np.isclose(metrics["mean_delay_sec"], 12.0)
+
     print("test_compute_event_metrics PASSED!")
+
 
 
 if __name__ == "__main__":

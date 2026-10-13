@@ -115,6 +115,7 @@ def compute_event_metrics(
     # 2. Match alarms to annotated seizure intervals
     n_seizures = len(annotated_seizures_sec)
     detected_seizures = set()
+    seizure_first_alarm: Dict[int, float] = {}
     false_alarms_count = 0
 
     for alarm_t in alarm_times_sec:
@@ -128,8 +129,16 @@ def compute_event_metrics(
         if matched_seizure_idx is not None:
             # Single-count rule: marks this seizure as detected
             detected_seizures.add(matched_seizure_idx)
+            if matched_seizure_idx not in seizure_first_alarm:
+                seizure_first_alarm[matched_seizure_idx] = float(alarm_t)
         else:
             false_alarms_count += 1
+
+    delays = [
+        float(seizure_first_alarm[idx] - annotated_seizures_sec[idx][0])
+        for idx in sorted(seizure_first_alarm.keys())
+    ]
+    mean_delay_sec = float(np.mean(delays)) if len(delays) > 0 else float("nan")
 
     total_hours = total_duration_sec / 3600.0 if total_duration_sec > 0 else 1.0
     event_sensitivity = len(detected_seizures) / float(n_seizures) if n_seizures > 0 else 1.0
@@ -143,4 +152,7 @@ def compute_event_metrics(
         "total_alarms": len(alarm_times_sec),
         "total_hours": float(total_hours),
         "fp_per_hour": float(fp_per_hour),
+        "detection_delays_sec": delays,
+        "mean_delay_sec": mean_delay_sec,
     }
+

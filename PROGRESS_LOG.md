@@ -45,3 +45,6 @@
 - [2026-10-12 21:34:26] Stage 3 Complete: 10-subject LOSO benchmark successfully evaluated and saved!
 - [2026-10-12 21:34:26] Stage 5 Started: Synthesizing formal research report...
 - [2026-10-12 21:34:26] Stage 5 Complete: Formal Research Report saved to /root/Honors-EEG/outputs/experiments/exp_20261012_sprint/RESEARCH_REPORT_OCT12.md and /root/Honors-EEG/RESEARCH_REPORT_OCT12.md
+- [2026-10-13 06:23:00] Priority 1 & 2 Audit Complete: Reconciled 10-subject evaluation duration (20.92h actual), recovered calibrated threshold ablation table, diagnosed electro-decremental failure on chb04/chb06 (low amplitude inverting univariate energy features while connectivity achieves 0.5367 PR-AUC), and demonstrated that aggregate PR-AUC gain is driven by chb10 (+0.2158).
+- [2026-10-13 06:40:00] Priority 3 Post-Processing Complete: Implemented causal EWMA smoothing with leak-free inner-LOSO tuning (alpha*=0.20).
+- [2026-10-13 06:43:00] Priority 4 Deliverables Complete: Saved all fold/summary CSVs and publication figures to outputs/experiments/exp_20261013_postprocessing/; added regression tests (31/31 passed); synthesized comprehensive research report in RESEARCH_REPORT_OCT13_AUDIT_AND_POSTPROCESSING.md.

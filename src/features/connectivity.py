@@ -207,6 +207,46 @@ class EEGConnectivityExtractor:
         mat[:, self.triu_j, self.triu_i] = pairs
         return mat
 
+    def compute_full_matrices(
+        self, windows: np.ndarray, batch_size: int = 256
+    ) -> Dict[str, Dict[str, np.ndarray]]:
+        """Compute complete (N, C, C) PLV and PLI symmetric adjacency matrices for each band.
+
+        Args:
+            windows: Batch array of shape (N, C, T) or (C, T)
+            batch_size: Maximum windows per chunk
+
+        Returns:
+            Dictionary mapping band_name -> {"plv": (N, C, C), "pli": (N, C, C)}
+        """
+        if windows.ndim == 2:
+            windows = np.expand_dims(windows, axis=0)
+        N, C, T = windows.shape
+
+        matrices_by_band: Dict[str, Dict[str, List[np.ndarray]]] = {
+            b: {"plv": [], "pli": []} for b in self.bands
+        }
+
+        for start_idx in range(0, N, batch_size):
+            end_idx = min(start_idx + batch_size, N)
+            chunk = windows[start_idx:end_idx]
+            n_chunk = len(chunk)
+
+            for band_name in self.bands:
+                plv_pairs, pli_pairs = self._compute_band_matrices(chunk, band_name)
+                full_plv = self._pairs_to_full_matrix(plv_pairs, n_chunk)
+                full_pli = self._pairs_to_full_matrix(pli_pairs, n_chunk)
+                matrices_by_band[band_name]["plv"].append(full_plv)
+                matrices_by_band[band_name]["pli"].append(full_pli)
+
+        return {
+            b: {
+                "plv": np.concatenate(matrices_by_band[b]["plv"], axis=0),
+                "pli": np.concatenate(matrices_by_band[b]["pli"], axis=0),
+            }
+            for b in self.bands
+        }
+
     def extract_features(self, windows: np.ndarray, batch_size: int = 256) -> np.ndarray:
         """Extract all configured functional connectivity features for batch of windows.
 

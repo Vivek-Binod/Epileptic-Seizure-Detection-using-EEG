@@ -15,29 +15,35 @@ This report establishes the first end-to-end deep learning benchmark for the Hon
 The evaluation was executed on dedicated GPU hardware under the exact same strict, leak-free 23-fold Leave-One-Patient-Out cross-validation protocol as the preceding classical baselines, ensuring direct comparability.
 
 ```
-========================================================================================
-FULL COHORT BENCHMARK SUMMARY (24 Cases / 23 Patients / 35.99 Eval Hours / 28 Seizures)
-========================================================================================
-Model Architecture               Feature Input       Macro PR-AUC  Macro ROC-AUC  Sens (%)   FP/h
-----------------------------------------------------------------------------------------
-Conventional RF Baseline         252 Hand-crafted       0.5504        0.8126       72.9%     3.58
-Connectivity RF Baseline         200 PLV/PLI            0.5342        0.8037       75.0%     0.64
-Combined Full RF                 452 Hand-crafted       0.5342        0.8354       70.8%     3.53
-Conventional RF + Causal EWMA    252 Hand-crafted       0.5732        0.8335       70.8%     1.03
-Combined + Graph + Causal EWMA   492 Hand-crafted       0.5694        0.8491       75.0%     0.81
-----------------------------------------------------------------------------------------
-Compact 1D CNN (Raw Time-Series) Raw 18x1024 (45k)      0.4345        0.8370       81.3%    27.09
-Compact 1D CNN + Causal EWMA     Raw 18x1024 (45k)      0.5571        0.8493       77.1%    17.81
-========================================================================================
+========================================================================================================
+VERIFIED FULL-COHORT BENCHMARK SUMMARY (24 Cases / 23 Patients / 35.99 Eval Hours / 28 Seizures)
+========================================================================================================
+Model Architecture               Feature Input       Macro PR-AUC  Macro ROC-AUC  Macro Sens  Pooled Sens   Pooled FP/h
+--------------------------------------------------------------------------------------------------------
+Conventional RF Baseline         252 Hand-crafted       0.4972        0.8290        75.0%     71.4% (20/28)    3.45
+Connectivity RF Baseline         200 PLV/PLI            0.2698        0.7854        52.1%     46.4% (13/28)    5.86
+Combined Multimodal RF           452 Hand-crafted       0.5110        0.8382        70.8%     67.9% (19/28)    3.58
+Conventional RF + Causal EWMA    252 Hand-crafted       0.5459        0.8391        70.8%     67.9% (19/28)    1.19
+Combined Multimodal + EWMA       452 Hand-crafted       0.5564        0.8459        68.8%     64.3% (18/28)    1.03
+Combined + Graph + Causal EWMA   492 Hand-crafted       0.5437        0.8459        70.8%     67.9% (19/28)    2.72
+--------------------------------------------------------------------------------------------------------
+Compact 1D CNN (Raw Time-Series) Raw 18x1024 (45k)      0.4345        0.8370        81.3%     75.0% (21/28)   27.09
+Compact 1D CNN + Causal EWMA     Raw 18x1024 (45k)      0.5571        0.8493        77.1%     71.4% (20/28)   17.81
+========================================================================================================
+*Note: Baselines forensically verified from outputs/experiments/exp_20261013_full_cohort/full_cohort_summary.csv and
+ exp_20261013_full_cohort_networks/full_cohort_network_model_summary.csv (see CNN_RESULTS_FORENSIC_AUDIT.md).
+ Macro Sens = unweighted mean across cases; Pooled Sens = detected seizures / 28 total annotated seizures.*
 ```
 
 ### Key Findings & Empirical Conclusions
 
 1. **High Discrimination and Seizure Sensitivity:**  
-   The raw 1D CNN demonstrates strong global ranking discrimination, achieving a Macro Case ROC-AUC of **0.8493** (matching the Graph Theoretical RF ensemble at 0.8491) and the highest raw event sensitivity across all tested models at **81.25%** (detecting 21 of 28 clinical seizures without smoothing; 20 of 28 with EWMA).
+   The raw 1D CNN demonstrates strong global ranking discrimination, achieving a Macro Case ROC-AUC of **0.8493** (highest among all evaluated models across the 23-patient cohort) and the highest event sensitivity: **81.25% Macro Case Sensitivity (75.00% Pooled, 21/28)** without smoothing, and **77.08% Macro Case Sensitivity (71.43% Pooled, 20/28)** with causal EWMA.
 2. **Massive Impact of Causal EWMA Post-Processing:**  
    Raw end-to-end neural predictions exhibit high window-to-window variance due to sharp interictal transients. Causal Exponential Weighted Moving Average (EWMA, $\alpha = 0.30$) post-processing provides a transformative performance boost:
    - Macro Case PR-AUC jumps from **0.4345 to 0.5571** (+0.1226 absolute gain, +28.2% relative improvement).
+   - This elevates the 1D CNN + EWMA past the Conventional RF Baseline (0.5571 vs 0.4972, $+0.0599$ PR-AUC gain) to match the best multimodal feature ensemble (Combined + EWMA at 0.5564).
+   - False alarm rate decreases by **34.3%** from 27.09 FP/h to 17.81 FP/h (pooled).
    - False alarm rate decreases by **34.3%** from 27.09 FP/h to 17.81 FP/h (pooled).
 3. **The Precision vs. Representation Trade-off:**  
    While the 1D CNN matches hand-crafted feature ensembles in Macro PR-AUC (0.5571 vs. 0.5732) and ROC-AUC (0.8493 vs. 0.8491), classical tree ensembles trained on domain-specific spectral and graph features maintain a substantial advantage in background specificity (0.81–1.03 FP/h vs. 17.81 FP/h). Raw convolutional kernels capture localized sharp waves and spikes, triggering isolated false alarms during complex background rhythms that domain features effectively suppress.
@@ -110,17 +116,19 @@ with smoothing factor $\alpha = 0.30$. This post-processing is strictly causal, 
 
 Evaluation metrics across the full cohort (24 cases, 23 biological patients, 35.99 continuous evaluation hours, 28 clinical seizures):
 
-| Model Paradigm | Feature Input | Parameters / Trees | Macro Case PR-AUC | Macro Case ROC-AUC | Event Sens (%) | Detected / Total | Macro FP/h | Pooled FP/h |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Conventional Baseline (RF)** | 252 Hand-crafted | 100 Trees | 0.5504 | 0.8126 | 72.9% | 20 / 28 | 3.58 | 3.58 |
-| **Connectivity Baseline (RF)** | 200 PLV/PLI | 100 Trees | 0.5342 | 0.8037 | 75.0% | 21 / 28 | 0.64 | 0.64 |
-| **Combined Full (RF)** | 452 Hand-crafted | 100 Trees | 0.5342 | 0.8354 | 70.8% | 20 / 28 | 3.53 | 3.53 |
-| **Conventional + Causal EWMA** | 252 Hand-crafted | 100 Trees | **0.5732** | 0.8335 | 70.8% | 20 / 28 | 1.03 | 1.03 |
-| **Combined + Graph + EWMA** | 492 Hand-crafted | 100 Trees | 0.5694 | 0.8491 | 75.0% | 21 / 28 | **0.81** | **0.81** |
-| **Compact 1D CNN (Raw Time-Series)** | Raw $18 \times 1024$ | 45,409 params | 0.4345 | 0.8370 | **81.25%** | **21 / 28** | 30.45 | 27.09 |
-| **Compact 1D CNN + Causal EWMA** | Raw $18 \times 1024$ | 45,409 params | **0.5571** | **0.8493** | 77.08% | 20 / 28 | 19.57 | 17.81 |
+| Model Paradigm | Feature Input | Parameters / Trees | Macro Case PR-AUC | Macro Case ROC-AUC | Macro Case Sens (%) | Pooled Sens (Det/Tot) | Macro Case FP/h | Pooled FP/h |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Conventional Baseline (RF)** | 252 Hand-crafted | 100 Trees | 0.4972 | 0.8290 | 75.0% | 71.4% (20 / 28) | 3.45 | 3.45 |
+| **Connectivity Baseline (RF)** | 200 PLV/PLI | 100 Trees | 0.2698 | 0.7854 | 52.1% | 46.4% (13 / 28) | 2.74 | 5.86 |
+| **Combined Multimodal (RF)** | 452 Hand-crafted | 100 Trees | 0.5110 | 0.8382 | 70.8% | 67.9% (19 / 28) | 3.46 | 3.58 |
+| **Conventional + Causal EWMA** | 252 Hand-crafted | 100 Trees | 0.5459 | 0.8391 | 70.8% | 67.9% (19 / 28) | 1.09 | 1.19 |
+| **Combined Multimodal + EWMA** | 452 Hand-crafted | 100 Trees | 0.5564 | 0.8459 | 68.8% | 64.3% (18 / 28) | **0.82** | **1.03** |
+| **Combined + Graph Metrics (RF)**| 492 Hand-crafted | 100 Trees | 0.5144 | 0.8344 | 66.7% | 64.3% (18 / 28) | 3.36 | 3.50 |
+| **Combined + Graph + EWMA** | 492 Hand-crafted | 100 Trees | 0.5437 | 0.8459 | 70.8% | 67.9% (19 / 28) | 2.56 | 2.72 |
+| **Compact 1D CNN (Raw Time-Series)** | Raw $18 \times 1024$ | 45,409 params | 0.4345 | 0.8370 | **81.3%** | **75.0% (21 / 28)**| 30.45 | 27.09 |
+| **Compact 1D CNN + Causal EWMA** | Raw $18 \times 1024$ | 45,409 params | **0.5571** | **0.8493** | 77.1% | 71.4% (20 / 28) | 19.57 | 17.81 |
 
-*Note: For Random Forest models on continuous evaluation sessions, macro FP/h and pooled FP/h are identical because predictions were evaluated over the continuous evaluation set. For the 1D CNN, macro FP/h represents the unweighted mean across cases, while pooled FP/h represents total false alarm count divided by total cohort duration (35.99 hours).*
+*Note: Baseline models are forensically audited from outputs/experiments/exp_20261013_full_cohort/full_cohort_summary.csv and exp_20261013_full_cohort_networks/full_cohort_network_model_summary.csv. Macro Case Sens is the unweighted average across all 24 cases; Pooled Sens is total detected seizures divided by 28 cohort seizures. Full reconciliation documented in CNN_RESULTS_FORENSIC_AUDIT.md.*
 
 ---
 
@@ -198,13 +206,13 @@ Grouping `chb01` and `chb21` under single biological patient `patient_01`:
 A critical theoretical finding emerges when comparing the 1D CNN with tree-based ensembles:
 
 1. **ROC-AUC (Global Ranking):**  
-   The Compact 1D CNN + EWMA achieves a Macro ROC-AUC of **0.8493**, virtually identical to the Combined + Graph Random Forest (**0.8491**) and superior to the Conventional Baseline (**0.8126**). This demonstrates that the convolutional filters learn highly discriminative temporal representations capable of distinguishing seizure dynamics from baseline EEG across patients.
+   The Compact 1D CNN + EWMA achieves a Macro ROC-AUC of **0.8493**, the highest among all evaluated models across the 23-patient cohort (superior to the Conventional Baseline at **0.8290** and Combined Multimodal + EWMA at **0.8459**). This demonstrates that end-to-end convolutional filters learn robust, patient-independent temporal representations of seizure onset dynamics directly from raw EEG.
 2. **PR-AUC (Precision at Operating Points):**  
-   In the unsmoothed state, the 1D CNN's PR-AUC is **0.4345**, significantly lower than the Random Forest baseline (**0.5504**). However, causal EWMA post-processing increases this to **0.5571**, closing the gap with the classical baseline.
+   In the unsmoothed state, the 1D CNN's PR-AUC is **0.4345**, lagging behind the Conventional Random Forest baseline (**0.4972**). However, causal EWMA post-processing increases this to **0.5571**, yielding a **+0.0599 PR-AUC gain over the Conventional baseline** and matching the best hand-crafted multimodal ensemble (Combined + EWMA at **0.5564**).
 3. **The False Alarm Disparity:**  
-   The most dramatic difference lies in false alarm generation:
-   - Combined Graph + EWMA Random Forest: **0.81 FP/h** (pooled).
-   - Compact 1D CNN + EWMA: **17.81 FP/h** (pooled).
+   The primary trade-off lies in false alarm generation:
+   - Combined Multimodal + EWMA Random Forest: **1.03 FP/h** (pooled), **0.82 FP/h** (macro).
+   - Compact 1D CNN + EWMA: **17.81 FP/h** (pooled), **19.57 FP/h** (macro).
 
 ### 4.2 Why Does the Raw 1D CNN Generate More False Alarms?
 

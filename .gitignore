@@ -10,17 +10,26 @@ __pycache__/
 *.so
 .pytest_cache/
 
-# Data artifacts & cache
-/data/
-/outputs/
-!/outputs/audit/
+# Experiments outputs and deep learning checkpoints
+outputs/
 *.npy
 *.npz
 *.parquet
 *.h5
+*.pt
+*.pth
+
+# Data caches (preserve metadata manifests)
+data/*
+!data/recordings_manifest.csv
+!data/seizures_manifest.csv
+data/feature_cache/
 
 # OS / Editor / Scratch
 .DS_Store
 .vscode/
 .idea/
 scratch/
+presentation_initial/
+presentation_prep/
+review_package_oct23/

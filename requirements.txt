@@ -1,0 +1,21 @@
+# Core scientific and numerical computing
+numpy>=1.24.0,<2.3.0
+scipy>=1.10.0
+pandas>=2.0.0
+pyarrow>=14.0.0
+
+# Signal processing & EEG
+mne>=1.5.0
+networkx>=3.0
+
+# Machine learning & Deep learning
+scikit-learn>=1.3.0
+lightgbm>=4.0.0
+torch>=2.0.0
+
+# Visualization & utilities
+matplotlib>=3.7.0
+tqdm>=4.65.0
+
+# Testing
+pytest>=7.4.0
